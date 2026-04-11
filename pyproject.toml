@@ -1,0 +1,20 @@
+[project]
+name = "bwftool"
+version = "0.1.0"
+description = "CLI for working with Broadcast Wave files"
+readme = "README.md"
+authors = [
+    { name = "Michael Andrec", email = "mandrecphd@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "cyclopts>=4.10.2",
+    "loguru>=0.7.3",
+]
+
+[project.scripts]
+bwftool = "bwftool:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
