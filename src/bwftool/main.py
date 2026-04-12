@@ -228,13 +228,33 @@ def splice():
 
 
 @app.command
-def validate():
-    """Verify that the audio chunk (or file) MD5 digest for fixity.
+def validate(*files: str, quiet=False):
+    """Verify that the audio chunk MD5 digest for fixity.
 
-       Parameters
-       ----------
+        Parameters
+        ----------
+        files: str
+            Audio files to verify MD5 digest for fixity.
+        quiet: bool
+            Suppress messages about successful validation.
     """
-    logger.warning("Not yet implemented")
+
+    for infile in files:
+        infile = Path(infile)
+        try:
+            metadata = get_bwf_tech(infile, verify_digest=True)
+        except subprocess.CalledProcessError:
+            logger.error(f'BWF file {infile} could not be opened or is not a WAV file')
+            continue
+
+        if metadata is None:
+            logger.error(f'{infile} does not have BWF metadata or failed validation ')
+            # TODO can we disentangle these?
+            continue
+
+        if metadata['MD5Stored'] == "":
+            logger.warning(f'{infile} does not have a MD5 stored value')
+            continue
 
 
 if __name__ == "__main__":
