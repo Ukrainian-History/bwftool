@@ -5,11 +5,33 @@ import subprocess
 from cyclopts import App
 from loguru import logger
 import requests
+from glom import glom
+import yaml
 
 from bwfIO import get_bwf_tech
 from bwfIO import get_bwf_core
 
 app = App(help="CLI tool for working with Broadcast Wav files.")
+
+
+yaml_path = Path.home() / ".bwftool"
+
+data = {}
+if yaml_path.exists():
+    with open(yaml_path, "r") as file:
+        data = yaml.safe_load(file)
+else:
+    logger.info(f"YAML config file {yaml_path.absolute()} not found. Some functionality may be missing.")
+
+doc_id = data.get("doc_id")
+key = data.get("key")
+
+if doc_id and key:
+    grist_base_url = "https://docs.getgrist.com/api"
+    grist_tables_url = f"{grist_base_url}/docs/{doc_id}/tables"
+    grist_api_headers = {"Authorization": f"Bearer {key}"}
+else:
+    grist_base_url = None
 
 
 def md5(path: Path, chunk_size: int = 8192) -> str:
@@ -26,27 +48,36 @@ def pretty_print(thing):
 
 
 @app.command
-def di(file_digest, yes, files):
+def di(file_digest = False, yes = False, files = "foo.bar"):
     """Extract BWF metadata and create/update a Digital Instantiation in Grist.
 
        Parameters
        ----------
     """
 
-    if not doc_id or not key:
-        logger.error('Must provide Grist API key and document ID')
+    if grist_base_url is None:
+        logger.error("Grist table ID and/or key has not been provided")
         exit(1)
 
-    field_mapping = {"OriginalFilename": "Digital_instantiation_identifier", "FileUse": "FileUse",
+    full_field_mapping = {"OriginalFilename": "Digital_instantiation_identifier", "FileUse": "FileUse",
                      "Duration": "Duration",
                      "ICMT": "Digitization_comment", "MD5Stored": "MD5Stored", "OriginationDate": "OriginationDate",
                      "OriginationTime": "OriginationTime", "CodingHistory": "CodingHistory", "ITCH": "Technician",
                      "ISFT": "Creating_software", "Channels": "Channels", "SampleRate": "SampleRate",
                      "BitPerSample": "BitPerSample", "FileSize": "File_Size", "Description": "Description"}
 
-    base_url = "https://docs.getgrist.com/api"
-    tables_base_url = f"{base_url}/docs/{doc_id}/tables"
-    headers = {"Authorization": f"Bearer {key}"}
+    grist_out = requests.get(f"{grist_tables_url}/Digital_instantiations/columns", headers=grist_api_headers)
+    if grist_out.status_code >= 400:
+        logger.error(f'Grist API call failed. {grist_out.text}')
+        exit(1)
+    if grist_out.status_code != 200:
+        logger.error(f'Grist API problem. {grist_out.text}')
+        exit(1)
+
+    grist_columns = glom(grist_out.json(), ('columns', ['id']))
+    field_mapping = {key: value for key, value in full_field_mapping.items() if value in grist_columns}
+    if len(field_mapping) < len(full_field_mapping):
+        logger.info(f'Some columns for BWF data are missing in the Grist DI table')
 
     for infile in files:
         try:
@@ -71,7 +102,7 @@ def di(file_digest, yes, files):
         # remap BWFfileIO field names to Grist field names, and get rid of the unused ones
         metadata = {field_mapping[k]: metadata[k] for k in metadata.keys() if k in field_mapping.keys()}
 
-        grist_records = requests.get(f"{tables_base_url}/Digital_instantiations/records", headers=headers,
+        grist_records = requests.get(f"{grist_tables_url}/Digital_instantiations/records", headers=grist_api_headers,
                                      params={"filter": f'{{"Digital_instantiation_identifier": ["{identifier}"]}}'})
         records = grist_records.json()["records"]
 
@@ -91,7 +122,7 @@ def di(file_digest, yes, files):
 
         if len(records) == 0:
             logger.debug("creating new digital instantiation %s", identifier)
-            grist_out = requests.post(f"{tables_base_url}/Digital_instantiations/records", headers=headers,
+            grist_out = requests.post(f"{grist_tables_url}/Digital_instantiations/records", headers=grist_api_headers,
                                       json={"records": [{"fields": metadata}]})
 
             if grist_out.status_code == requests.codes.ok:
@@ -121,7 +152,7 @@ def di(file_digest, yes, files):
                 print("the BWF file has the following fields that are not in Grist:")
                 pretty_print(new_fields)
                 if click.confirm('Do you want to update the metadata in Grist?'):
-                    grist_out = requests.patch(f"{tables_base_url}/Digital_instantiations/records", headers=headers,
+                    grist_out = requests.patch(f"{grist_tables_url}/Digital_instantiations/records", headers=grist_api_headers,
                                                json={"records": [{"id": row_id, "fields": new_fields}]})
 
                     if grist_out.status_code == requests.codes.ok:
@@ -135,7 +166,7 @@ def di(file_digest, yes, files):
                 print("the following fields in the BWF file differ from those in Grist:")
                 pretty_print(differences)
                 if click.confirm('Do you want to update the metadata in Grist?'):
-                    grist_out = requests.patch(f"{tables_base_url}/Digital_instantiations/records", headers=headers,
+                    grist_out = requests.patch(f"{grist_tables_url}/Digital_instantiations/records", headers=grist_api_headers,
                                                json={"records": [{"id": row_id, "fields": differences}]})
 
                     if grist_out.status_code == requests.codes.ok:
