@@ -1,4 +1,6 @@
 .idea
+*.wav
+*.mp3
 
 
 # Python-generated files

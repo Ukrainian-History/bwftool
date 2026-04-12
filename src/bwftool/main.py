@@ -1,12 +1,15 @@
 from pathlib import Path
 import hashlib
 import subprocess
+from os import path
+from datetime import datetime, timezone
 
 from cyclopts import App
 from loguru import logger
 import requests
 from glom import glom
 import yaml
+from rich.prompt import Confirm
 
 from bwfIO import get_bwf_tech
 from bwfIO import get_bwf_core
@@ -48,11 +51,17 @@ def pretty_print(thing):
 
 
 @app.command
-def di(file_digest = False, yes = False, files = "foo.bar"):
+def di(*files: str, file_digest = False, yes = False):
     """Extract BWF metadata and create/update a Digital Instantiation in Grist.
 
-       Parameters
-       ----------
+        Parameters
+        ----------
+        file_digest : bool, optional
+            Calculate the MD5 digest of the entire WAV file and store result in the DI. Slow for large files!
+        yes: bool, optional
+            Answer 'yes' to all questions. May cause unintended overwriting of DI metadata in Grist.
+        files: str
+            Path(s) to BWF file(s).
     """
 
     if grist_base_url is None:
@@ -77,15 +86,17 @@ def di(file_digest = False, yes = False, files = "foo.bar"):
     grist_columns = glom(grist_out.json(), ('columns', ['id']))
     field_mapping = {key: value for key, value in full_field_mapping.items() if value in grist_columns}
     if len(field_mapping) < len(full_field_mapping):
-        logger.info(f'Some columns for BWF data are missing in the Grist DI table')
+        logger.info(f'Some columns for valid BWF data are missing in the Grist DI table')
 
     for infile in files:
         try:
             metadata = get_bwf_core(infile)
-            metadata["filename"] = infile  # Why??
-            metadata.update(get_bwf_tech(infile))
         except subprocess.CalledProcessError:
+            logger.error(f'BWF file {infile} could not be opened')
             continue
+
+        metadata["filename"] = infile  # Why??
+        metadata.update(get_bwf_tech(infile))
 
         if metadata["OriginalFilename"] != "":
             if metadata["filename"] != metadata["OriginalFilename"]:
@@ -94,7 +105,7 @@ def di(file_digest = False, yes = False, files = "foo.bar"):
 
             identifier = metadata["OriginalFilename"]
         else:
-            identifier = Path(metadata["filename"]).stem
+            identifier = Path(metadata["filename"]).name
             metadata["OriginalFilename"] = identifier
 
         metadata["FileSize"] = path.getsize(infile)
@@ -151,7 +162,7 @@ def di(file_digest = False, yes = False, files = "foo.bar"):
             if new_fields:
                 print("the BWF file has the following fields that are not in Grist:")
                 pretty_print(new_fields)
-                if click.confirm('Do you want to update the metadata in Grist?'):
+                if Confirm('Do you want to update the metadata in Grist?'):
                     grist_out = requests.patch(f"{grist_tables_url}/Digital_instantiations/records", headers=grist_api_headers,
                                                json={"records": [{"id": row_id, "fields": new_fields}]})
 
@@ -165,7 +176,7 @@ def di(file_digest = False, yes = False, files = "foo.bar"):
             if differences:
                 print("the following fields in the BWF file differ from those in Grist:")
                 pretty_print(differences)
-                if click.confirm('Do you want to update the metadata in Grist?'):
+                if Confirm('Do you want to update the metadata in Grist?'):
                     grist_out = requests.patch(f"{grist_tables_url}/Digital_instantiations/records", headers=grist_api_headers,
                                                json={"records": [{"id": row_id, "fields": differences}]})
 
