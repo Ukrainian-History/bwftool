@@ -30,6 +30,7 @@ dependencies = [
     { name = "loguru" },
     { name = "pyyaml" },
     { name = "requests" },
+    { name = "rich" },
 ]
 
 [package.metadata]
@@ -39,6 +40,7 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", specifier = ">=2.33.1" },
+    { name = "rich", specifier = ">=14.3.4" },
 ]
 
 [[package]]

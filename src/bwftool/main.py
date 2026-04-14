@@ -96,6 +96,8 @@ def di(*files: str, file_digest = False, yes = False):
             logger.error(f'BWF file {infile} could not be opened or is not a WAV file')
             continue
 
+        # TODO allow for MP3 DI creation
+
         metadata["filename"] = infile  # TODO Why is this necessary????
         metadata.update(get_bwf_tech(infile))
 
@@ -195,6 +197,22 @@ def di(*files: str, file_digest = False, yes = False):
 
             if not new_fields and not differences:
                 print("the metadata in the BWF file match those in Grist")
+
+
+@app.command
+def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True):
+    """Upload file(s) to an S3 bucket. Bucket information and credentials must be in the config file.
+
+        Parameters
+        ----------
+        files (str): One or more files to upload.
+        skip_checksum (bool):
+            By default, a SHA256 checksum is looked up from Grist (or calculated if missing) and included in the S3
+            payload to verify the integrity of the uploaded file. This flag disables this behavoir.
+        store_sha (bool):
+            Store the SHA256 checksum generated as part of the upload process in Grist. Use --no-store-sha to not save
+            to Grist.
+    """
 
 
 @app.command
