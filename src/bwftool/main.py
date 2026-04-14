@@ -37,11 +37,11 @@ else:
     grist_base_url = None
 
 
-def md5(path: Path, chunk_size: int = 8192) -> str:
-    h = hashlib.md5()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(chunk_size), b""):
-            h.update(chunk)
+def sha256(file: str) -> str:
+    h = hashlib.sha256()
+    with open(file, "rb") as f:
+        for block in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(block)
     return h.hexdigest()
 
 
@@ -57,7 +57,7 @@ def di(*files: str, file_digest = False, yes = False):
         Parameters
         ----------
         file_digest : bool, optional
-            Calculate the MD5 digest of the entire WAV file and store result in the DI. Slow for large files!
+            Calculate the SHA256 digest of the entire WAV file and store result in the DI. Slow for large files!
         yes: bool, optional
             Answer 'yes' to all questions. May cause unintended overwriting of DI metadata in Grist.
         files: str
@@ -138,10 +138,10 @@ def di(*files: str, file_digest = False, yes = False):
         metadata["BitPerSample"] = int(metadata["BitPerSample"])
 
         if file_digest:
-            if len(records) == 1 and records[0]['fields']['MD5File']:
-                logger.warning('MD5File already exists in Grist DI table. Skipping digest calculation')
+            if len(records) == 1 and records[0]['fields']['SHA256']:
+                logger.warning('SHA256 already exists in Grist DI table. Skipping digest calculation.')
             else:
-                metadata["MD5File"] = md5(infile)
+                metadata["SHA256"] = sha256(infile)
 
         if len(records) == 0:
             logger.trace(f"creating new digital instantiation {identifier}")
