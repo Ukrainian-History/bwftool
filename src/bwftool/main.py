@@ -13,6 +13,7 @@ from rich.prompt import Confirm
 
 from bwfIO import get_bwf_tech
 from bwfIO import get_bwf_core
+from aws_s3 import upload_s3
 
 app = App(help="CLI tool for working with Broadcast Wav files.")
 
@@ -200,19 +201,64 @@ def di(*files: str, file_digest = False, yes = False):
 
 
 @app.command
-def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True):
+def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, verify_sha: bool = False,
+             threshold_mb: int = 64, chunk_mb: int = 64, concurrency: int = 8, storage_class: str = "DEEP_ARCHIVE"):
     """Upload file(s) to an S3 bucket. Bucket information and credentials must be in the config file.
 
         Parameters
         ----------
         files (str): One or more files to upload.
         skip_checksum (bool):
-            By default, a SHA256 checksum is looked up from Grist (or calculated if missing) and included in the S3
+            By default, a SHA256 checksum is retreived from Grist (or calculated if missing) and included in the S3
             payload to verify the integrity of the uploaded file. This flag disables this behavoir.
         store_sha (bool):
             Store the SHA256 checksum generated as part of the upload process in Grist. Use --no-store-sha to not save
             to Grist.
+        verify_sha (bool):
+            Retrieve SHA256 checksum from Grist and verify local file before attempting to upload.
+        threshold_mb (int):
+            File size above which multipart upload will be used.
+        chunk_mb (int):
+            Size of multipart chunks.
+        concurrency (int):
+            Number of simultaneous uploads.
+        storage_class (str):
+            AWS S3 storage class to which the uploaded file(s) should be assigned.
     """
+
+    threshold = threshold_mb * 1024 * 1024
+    chunk = chunk_mb * 1024 * 1024
+
+    bucket = "blahblah"  # TODO get bucket from config
+
+    for file in files:
+        if not path.exists(file):
+            raise FileNotFoundError(file)
+
+        if not skip_checksum:
+            expected_sha = 'xyz'  # TODO get SHA256 from Grist
+
+            # TODO what if Grist has no SHA256?
+
+            if verify_sha:
+                local = sha256(file)
+                if local != expected_sha:
+                    raise ValueError(f"Local checksum mismatch for {file}")
+                if store_sha:
+                    pass  # TODO save to grist
+
+            resp, head = upload_s3(bucket=bucket, path=file, key=key, expected_checksum_b64=expected_sha,
+                storage_class=storage_class, threshold=threshold, chunk=chunk, concurrency=concurrency)
+        else:
+            logger.error("not yet implemented")
+            exit(1)
+
+        # TODO clean up
+
+        # results are in
+        #     "s3_checksum_sha256": head.get("ChecksumSHA256", ""),
+        #     "etag": head.get("ETag", ""),
+        #     "storage_class": head.get("StorageClass", ""),
 
 
 @app.command
