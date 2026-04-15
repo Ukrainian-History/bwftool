@@ -1,6 +1,7 @@
 .idea
 *.wav
 *.mp3
+*_slop.py
 
 
 # Python-generated files
