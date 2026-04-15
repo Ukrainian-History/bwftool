@@ -3,6 +3,7 @@ import hashlib
 import subprocess
 from os import path
 from datetime import datetime, timezone
+from typing import Literal
 
 from cyclopts import App
 from loguru import logger
@@ -27,8 +28,9 @@ if yaml_path.exists():
 else:
     logger.info(f"YAML config file {yaml_path.absolute()} not found. Some functionality may be missing.")
 
-doc_id = data.get("doc_id")
-key = data.get("key")
+doc_id = data.get("grist_doc_id")
+key = data.get("grist_key")
+bucket = data.get("s3_bucket")
 
 if doc_id and key:
     grist_base_url = "https://docs.getgrist.com/api"
@@ -50,6 +52,35 @@ def pretty_print(thing):
     for name, val in thing.items():
         print(f'{name:20} => {val}')
 
+
+def get_from_grist(table: Literal['di', 'columns'], identifier):
+    if table == 'di':
+        grist_out = requests.get(f"{grist_tables_url}/Digital_instantiations/records", headers=grist_api_headers,
+                                     params={"filter": f'{{"Digital_instantiation_identifier": ["{identifier}"]}}'})
+    if table == 'columns':
+        grist_out = requests.get(f"{grist_tables_url}/Digital_instantiations/columns", headers=grist_api_headers)
+
+    if grist_out.status_code >= 400:
+        logger.error(f'Grist API call failed. {grist_out.text}')
+        return None
+    if grist_out.status_code != 200:
+        logger.error(f'Grist API problem. {grist_out.text}')
+        return None
+
+    if table == 'di':
+        records = grist_out.json()["records"]
+        if len(records) > 1:
+            message = (f"the identifier {identifier} has more than one digital instantiation record in Grist"
+                       " -- this isn't supposed to happen!")
+            logger.error(message)
+            return None
+
+        return records
+
+    if table == 'columns':
+        return grist_out
+
+    return None
 
 @app.command
 def di(*files: str, file_digest = False, yes = False):
@@ -76,12 +107,8 @@ def di(*files: str, file_digest = False, yes = False):
                      "ISFT": "Creating_software", "Channels": "Channels", "SampleRate": "SampleRate",
                      "BitPerSample": "BitPerSample", "FileSize": "File_Size", "Description": "Description"}
 
-    grist_out = requests.get(f"{grist_tables_url}/Digital_instantiations/columns", headers=grist_api_headers)
-    if grist_out.status_code >= 400:
-        logger.error(f'Grist API call failed. {grist_out.text}')
-        exit(1)
-    if grist_out.status_code != 200:
-        logger.error(f'Grist API problem. {grist_out.text}')
+    grist_out = get_from_grist('columns', None)
+    if grist_out is None:
         exit(1)
 
     grist_columns = glom(grist_out.json(), ('columns', ['id']))
@@ -117,14 +144,8 @@ def di(*files: str, file_digest = False, yes = False):
         # remap BWFfileIO field names to Grist field names, and get rid of the unused ones
         metadata = {field_mapping[k]: metadata[k] for k in metadata.keys() if k in field_mapping.keys()}
 
-        grist_records = requests.get(f"{grist_tables_url}/Digital_instantiations/records", headers=grist_api_headers,
-                                     params={"filter": f'{{"Digital_instantiation_identifier": ["{identifier}"]}}'})
-        records = grist_records.json()["records"]
-
-        if len(records) > 1:
-            message = (f"the identifier {identifier} has more than one digital instantiation record in Grist"
-                       " -- this isn't supposed to happen")
-            logger.error(message)
+        records = get_from_grist('di', identifier)
+        if records is None:
             continue
 
         # convert the OriginationDate from ISO to unix timestamp to match how Grist encodes dates
@@ -202,34 +223,34 @@ def di(*files: str, file_digest = False, yes = False):
 
 @app.command
 def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, verify_sha: bool = False,
-             threshold_mb: int = 64, chunk_mb: int = 64, concurrency: int = 8, storage_class: str = "DEEP_ARCHIVE"):
+             threshold_mb: int = 64, chunk_mb: int = 64, concurrency: int = 8,
+             storage_class: Literal["STANDARD", "INTELLIGENT_TIERING", "STANDARD_IA", "ONEZONE_IA",
+                                    "GLACIER_IR", "GLACIER", "DEEP_ARCHIVE"] = "DEEP_ARCHIVE"):
     """Upload file(s) to an S3 bucket. Bucket information and credentials must be in the config file.
 
         Parameters
         ----------
-        files (str): One or more files to upload.
-        skip_checksum (bool):
+        files: One or more files to upload.
+        skip_checksum:
             By default, a SHA256 checksum is retreived from Grist (or calculated if missing) and included in the S3
             payload to verify the integrity of the uploaded file. This flag disables this behavoir.
-        store_sha (bool):
+        store_sha:
             Store the SHA256 checksum generated as part of the upload process in Grist. Use --no-store-sha to not save
             to Grist.
-        verify_sha (bool):
+        verify_sha:
             Retrieve SHA256 checksum from Grist and verify local file before attempting to upload.
-        threshold_mb (int):
+        threshold_mb:
             File size above which multipart upload will be used.
-        chunk_mb (int):
+        chunk_mb:
             Size of multipart chunks.
-        concurrency (int):
+        concurrency:
             Number of simultaneous uploads.
-        storage_class (str):
+        storage_class:
             AWS S3 storage class to which the uploaded file(s) should be assigned.
     """
 
     threshold = threshold_mb * 1024 * 1024
     chunk = chunk_mb * 1024 * 1024
-
-    bucket = "blahblah"  # TODO get bucket from config
 
     for file in files:
         if not path.exists(file):
