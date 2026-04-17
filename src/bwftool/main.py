@@ -28,14 +28,14 @@ if yaml_path.exists():
 else:
     logger.info(f"YAML config file {yaml_path.absolute()} not found. Some functionality may be missing.")
 
-doc_id = data.get("grist_doc_id")
-key = data.get("grist_key")
-bucket = data.get("s3_bucket")
+grist_doc_id = data.get("grist_doc_id")
+grist_key = data.get("grist_key")
+s3_bucket = data.get("s3_bucket")
 
-if doc_id and key:
+if grist_doc_id and grist_key:
     grist_base_url = "https://docs.getgrist.com/api"
-    grist_tables_url = f"{grist_base_url}/docs/{doc_id}/tables"
-    grist_api_headers = {"Authorization": f"Bearer {key}"}
+    grist_tables_url = f"{grist_base_url}/docs/{grist_doc_id}/tables"
+    grist_api_headers = {"Authorization": f"Bearer {grist_key}"}
 else:
     grist_base_url = None
 
@@ -252,24 +252,41 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
     threshold = threshold_mb * 1024 * 1024
     chunk = chunk_mb * 1024 * 1024
 
+    if not s3_bucket:
+        logger.error("No bucket provided in config file")
+        exit(1)
+
     for file in files:
+        file = Path(file)
         if not path.exists(file):
-            raise FileNotFoundError(file)
+            logger.error(f"File {file} does not exist")
+            continue
+
+        identifier = file.name
 
         if not skip_checksum:
-            expected_sha = 'xyz'  # TODO get SHA256 from Grist
-
-            # TODO what if Grist has no SHA256?
-
-            if verify_sha:
-                local = sha256(file)
-                if local != expected_sha:
-                    raise ValueError(f"Local checksum mismatch for {file}")
+            records = get_from_grist('di', identifier)
+            if len(records) == 1 and records[0]['fields']['SHA256']:
+                expected_sha = records[0]['fields']['SHA256']
+                sha_just_calculated = False
+            else:
+                expected_sha = sha256(file)
+                sha_just_calculated = True
                 if store_sha:
                     pass  # TODO save to grist
 
-            resp, head = upload_s3(bucket=bucket, path=file, key=key, expected_checksum_b64=expected_sha,
-                storage_class=storage_class, threshold=threshold, chunk=chunk, concurrency=concurrency)
+            if verify_sha:
+                if not sha_just_calculated:
+                    local = sha256(file)
+                    if local != expected_sha:
+                        raise ValueError(f"Local checksum mismatch for {file}")
+                    if store_sha:
+                        pass  # TODO save to grist
+
+            resp, head = upload_s3(bucket=s3_bucket, path=str(file.resolve()), key=identifier,
+                                   expected_checksum_hex=expected_sha, storage_class=storage_class,
+                                   threshold=threshold, chunk=chunk, concurrency=concurrency)
+            pass
         else:
             logger.error("not yet implemented")
             exit(1)

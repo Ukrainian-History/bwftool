@@ -6,8 +6,9 @@ from pathlib import Path
 import boto3
 from botocore.exceptions import ClientError
 from boto3.s3.transfer import TransferConfig
+from typing_extensions import Literal
 
-s3_client = boto3.client("s3", region_name=region)
+s3_client = boto3.client("s3", region_name=None)  # TODO region is None by default in the original AI slop
 
 
 def to_key(path: str, root: str | None, prefix: str) -> str:
@@ -21,15 +22,14 @@ def to_key(path: str, root: str | None, prefix: str) -> str:
 
 
 def upload_singlepart(bucket, key, path, checksum_b64, storage_class):
-    with open(path, "rb") as body:
-        return s3_client.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=body,
-            StorageClass=storage_class,
-            ChecksumAlgorithm="SHA256",
-            ChecksumSHA256=checksum_b64,
-        )
+    return s3_client.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=path,
+        StorageClass=storage_class,
+        ChecksumAlgorithm="SHA256",
+        ChecksumSHA256=checksum_b64,
+    )
 
 
 def upload_multipart(bucket, key, path, storage_class, threshold, chunk, concurrency):
@@ -63,8 +63,11 @@ def verify_uploaded(bucket, key, expected_checksum_b64):
     return head
 
 
-def upload_s3(bucket, path, key, expected_checksum_b64, storage_class,
-              threshold, chunk, concurrency):
+def upload_s3(bucket, path, key, expected_checksum_hex,
+              storage_class: Literal["STANDARD", "INTELLIGENT_TIERING", "STANDARD_IA", "ONEZONE_IA",
+              "GLACIER_IR", "GLACIER", "DEEP_ARCHIVE"], threshold, chunk, concurrency):
+    expected_checksum_b64 = base64.b64encode(bytes.fromhex(expected_checksum_hex)).decode()
+
     size = os.path.getsize(path)
     if size < threshold:
         resp = upload_singlepart(bucket, key, path, expected_checksum_b64, storage_class)
