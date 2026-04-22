@@ -18,7 +18,6 @@ from aws_s3 import upload_s3
 
 app = App(help="CLI tool for working with Broadcast Wav files.")
 
-
 yaml_path = Path.home() / ".bwftool"
 
 data = {}
@@ -283,10 +282,12 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
                     if store_sha:
                         pass  # TODO save to grist
 
-            resp, head = upload_s3(bucket=s3_bucket, path=str(file.resolve()), key=identifier,
+            resp, head, status = upload_s3(bucket=s3_bucket, path=str(file.resolve()), key=identifier,
                                    expected_checksum_hex=expected_sha, storage_class=storage_class,
                                    threshold=threshold, chunk=chunk, concurrency=concurrency)
-            pass
+            if status is None:
+                logger.error(f"File {file} had checksum mismatch on S3 after upload.")
+                continue
         else:
             logger.error("not yet implemented")
             exit(1)

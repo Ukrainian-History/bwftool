@@ -22,14 +22,22 @@ def to_key(path: str, root: str | None, prefix: str) -> str:
 
 
 def upload_singlepart(bucket, key, path, checksum_b64, storage_class):
-    return s3_client.put_object(
-        Bucket=bucket,
-        Key=key,
-        Body=path,
-        StorageClass=storage_class,
-        ChecksumAlgorithm="SHA256",
-        ChecksumSHA256=checksum_b64,
-    )
+    if checksum_b64:
+        return s3_client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=open(path, "rb"),
+            StorageClass=storage_class,
+            ChecksumAlgorithm="SHA256",
+            ChecksumSHA256=checksum_b64,
+        )
+    else:
+        return s3_client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=open(path, "rb"),
+            StorageClass=storage_class,
+        )
 
 
 def upload_multipart(bucket, key, path, storage_class, threshold, chunk, concurrency):
@@ -59,8 +67,8 @@ def verify_uploaded(bucket, key, expected_checksum_b64):
     )
     actual = head.get("ChecksumSHA256")
     if actual and actual != expected_checksum_b64:
-        raise ValueError(f"Checksum mismatch for s3://{bucket}/{key}")
-    return head
+        return head, None
+    return head, True
 
 
 def upload_s3(bucket, path, key, expected_checksum_hex,
@@ -70,8 +78,8 @@ def upload_s3(bucket, path, key, expected_checksum_hex,
 
     size = os.path.getsize(path)
     if size < threshold:
-        resp = upload_singlepart(bucket, key, path, expected_checksum_b64, storage_class)
+        resp = upload_singlepart(bucket, key, path, None, storage_class)
     else:
         resp = upload_multipart(bucket, key, path, storage_class, threshold, chunk, concurrency)
-    head = verify_uploaded(bucket, key, expected_checksum_b64)
-    return resp, head
+    head, status = verify_uploaded(bucket, key, expected_checksum_b64)
+    return resp, head, status
