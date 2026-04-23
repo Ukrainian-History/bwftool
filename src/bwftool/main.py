@@ -225,11 +225,13 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
              threshold_mb: int = 64, chunk_mb: int = 64, concurrency: int = 8,
              storage_class: Literal["STANDARD", "INTELLIGENT_TIERING", "STANDARD_IA", "ONEZONE_IA",
                                     "GLACIER_IR", "GLACIER", "DEEP_ARCHIVE"] = "DEEP_ARCHIVE"):
-    """Upload file(s) to an S3 bucket. Bucket information and credentials must be in the config file.
+    """Upload file(s) to an S3 bucket. Bucket information must be in the bwftool config file, and AWS credentials
+        for boto3 must be in the '~/.aws' directory.
 
         Parameters
         ----------
-        files: One or more files to upload.
+        files:
+            One or more files to upload.
         skip_checksum:
             By default, a SHA256 checksum is retreived from Grist (or calculated if missing) and included in the S3
             payload to verify the integrity of the uploaded file. This flag disables this behavoir.
@@ -278,19 +280,17 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
                 if not sha_just_calculated:
                     local = sha256(file)
                     if local != expected_sha:
-                        raise ValueError(f"Local checksum mismatch for {file}")
-                    if store_sha:
-                        pass  # TODO save to grist
-
-            resp, head, status = upload_s3(bucket=s3_bucket, path=str(file.resolve()), key=identifier,
-                                   expected_checksum_hex=expected_sha, storage_class=storage_class,
-                                   threshold=threshold, chunk=chunk, concurrency=concurrency)
-            if status is None:
-                logger.error(f"File {file} had checksum mismatch on S3 after upload.")
-                continue
+                        logger.error(f"File {file} has local SHA256 checksum mismatch")
+                        continue
         else:
-            logger.error("not yet implemented")
-            exit(1)
+            expected_sha = None
+
+        resp, head, status = upload_s3(bucket=s3_bucket, path=str(file.resolve()), key=identifier,
+                                       expected_checksum_hex=expected_sha, storage_class=storage_class,
+                                       threshold=threshold, chunk=chunk, concurrency=concurrency)
+        if status is None:
+            logger.error(f"File {file} had checksum mismatch on S3 after upload.")
+            continue
 
         # TODO clean up
 
