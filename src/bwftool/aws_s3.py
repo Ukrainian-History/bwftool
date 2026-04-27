@@ -1,12 +1,9 @@
 import base64
 import hashlib
 import os
-from pathlib import Path
 import math
 
 import boto3
-from botocore.exceptions import ClientError
-from boto3.s3.transfer import TransferConfig
 from typing_extensions import Literal
 
 s3_client = boto3.client("s3", region_name=None)  # TODO region is None by default in the original AI slop
@@ -119,7 +116,7 @@ def upload_s3(bucket, path, key, expected_checksum_hex,
 
     size = os.path.getsize(path)
     if size < threshold:
-        resp = upload_singlepart(bucket, key, path, None, storage_class)
+        resp = upload_singlepart(bucket, key, path, expected_checksum_b64, storage_class)
         if expected_checksum_b64:
             head, status = verify_uploaded(bucket, key, expected_checksum_b64)
             if status is None:

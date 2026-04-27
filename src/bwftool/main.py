@@ -3,13 +3,14 @@ import hashlib
 import subprocess
 from os import path
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Literal, Any
 
 from cyclopts import App
 from loguru import logger
 import requests
 from glom import glom
 import yaml
+from requests import Response
 from rich.prompt import Confirm
 
 from bwfIO import get_bwf_tech
@@ -56,8 +57,11 @@ def get_from_grist(table: Literal['di', 'columns'], identifier):
     if table == 'di':
         grist_out = requests.get(f"{grist_tables_url}/Digital_instantiations/records", headers=grist_api_headers,
                                      params={"filter": f'{{"Digital_instantiation_identifier": ["{identifier}"]}}'})
-    if table == 'columns':
+    elif table == 'columns':
         grist_out = requests.get(f"{grist_tables_url}/Digital_instantiations/columns", headers=grist_api_headers)
+    else:
+        logger.error(f"table {table} not supported.")
+        exit(1)
 
     if grist_out.status_code >= 400:
         logger.error(f'Grist API call failed. {grist_out.text}')
@@ -80,6 +84,68 @@ def get_from_grist(table: Literal['di', 'columns'], identifier):
         return grist_out
 
     return None
+
+
+def put_to_grist(identifier, metadata, yes):
+    records = get_from_grist('di', identifier)
+    if records is None:
+        exit(1)
+
+    if len(records) == 0:
+        logger.trace(f"creating new digital instantiation {identifier}")
+        grist_out = requests.post(f"{grist_tables_url}/Digital_instantiations/records",
+                                  headers=grist_api_headers, json={"records": [{"fields": metadata}]})
+
+        if grist_out.status_code == requests.codes.ok:
+            logger.info(f"digital instantiation {identifier} successfully created")
+        elif grist_out.ok:
+            logger.warning("digital instantiation creation returned a status > 200 but < 400")
+        else:
+            logger.error(f"digital instantiation {identifier} could not be created. {grist_out.text}")
+    else:
+        grist_data = records[0]['fields']
+        row_id = records[0]['id']
+        logger.trace(f"updating digital instantiation {identifier}, record id {row_id}")
+
+        differences = {k: metadata[k] for k in metadata.keys()
+                       if metadata[k] != "" and grist_data[k] and metadata[k] != grist_data[k]}
+
+        new_fields = {k: metadata[k] for k in metadata.keys()
+                      if metadata[k] != "" and (grist_data[k] == "" or grist_data[k] is None)}
+
+        if new_fields:
+            print("the BWF file has the following fields that are not in Grist:")
+            pretty_print(new_fields)
+            if yes or Confirm.ask('Do you want to update the metadata in Grist?', default=True):
+                grist_out = requests.patch(f"{grist_tables_url}/Digital_instantiations/records",
+                                           headers=grist_api_headers,
+                                           json={"records": [{"id": row_id, "fields": new_fields}]})
+
+                if grist_out.status_code == requests.codes.ok:
+                    logger.info(f"digital instantiation {identifier} successfully updated")
+                elif grist_out.ok:
+                    logger.warning("digital instantiation update returned a status > 200 but < 400")
+                else:
+                    logger.error(f"digital instantiation {identifier} could not be updated")
+
+        if differences:
+            print("the following fields in the BWF file differ from those in Grist:")
+            pretty_print(differences)
+            if yes or Confirm.ask('Do you want to update the metadata in Grist?', default=True):
+                grist_out = requests.patch(f"{grist_tables_url}/Digital_instantiations/records",
+                                           headers=grist_api_headers,
+                                           json={"records": [{"id": row_id, "fields": differences}]})
+
+                if grist_out.status_code == requests.codes.ok:
+                    logger.info(f"digital instantiation {identifier} successfully updated")
+                elif grist_out.ok:
+                    logger.warning("digital instantiation update returned a status > 200 but < 400")
+                else:
+                    logger.error(f"digital instantiation {identifier} could not be updated")
+
+        if not new_fields and not differences:
+            print("the metadata in the BWF file match those in Grist")
+
 
 @app.command
 def di(*files: str, file_digest = False, yes = False):
@@ -164,60 +230,7 @@ def di(*files: str, file_digest = False, yes = False):
             else:
                 metadata["SHA256"] = sha256(infile)
 
-        if len(records) == 0:
-            logger.trace(f"creating new digital instantiation {identifier}")
-            grist_out = requests.post(f"{grist_tables_url}/Digital_instantiations/records",
-                                      headers=grist_api_headers, json={"records": [{"fields": metadata}]})
-
-            if grist_out.status_code == requests.codes.ok:
-                logger.info(f"digital instantiation {identifier} successfully created")
-            elif grist_out.ok:
-                logger.warning("digital instantiation creation returned a status > 200 but < 400")
-            else:
-                logger.error(f"digital instantiation {identifier} could not be created. {grist_out.text}")
-        else:
-            grist_data = records[0]['fields']
-            row_id = records[0]['id']
-            logger.trace(f"updating digital instantiation {identifier}, record id {row_id}")
-
-            differences = {k: metadata[k] for k in metadata.keys()
-                           if metadata[k] != "" and grist_data[k] and metadata[k] != grist_data[k]}
-
-            new_fields = {k: metadata[k] for k in metadata.keys()
-                          if metadata[k] != "" and (grist_data[k] == "" or grist_data[k] is None)}
-
-            if new_fields:
-                print("the BWF file has the following fields that are not in Grist:")
-                pretty_print(new_fields)
-                if yes or Confirm.ask('Do you want to update the metadata in Grist?', default=True):
-                    grist_out = requests.patch(f"{grist_tables_url}/Digital_instantiations/records",
-                                               headers=grist_api_headers,
-                                               json={"records": [{"id": row_id, "fields": new_fields}]})
-
-                    if grist_out.status_code == requests.codes.ok:
-                        logger.info(f"digital instantiation {identifier} successfully updated")
-                    elif grist_out.ok:
-                        logger.warning("digital instantiation update returned a status > 200 but < 400")
-                    else:
-                        logger.error(f"digital instantiation {identifier} could not be updated")
-
-            if differences:
-                print("the following fields in the BWF file differ from those in Grist:")
-                pretty_print(differences)
-                if yes or Confirm.ask('Do you want to update the metadata in Grist?', default=True):
-                    grist_out = requests.patch(f"{grist_tables_url}/Digital_instantiations/records",
-                                               headers=grist_api_headers,
-                                               json={"records": [{"id": row_id, "fields": differences}]})
-
-                    if grist_out.status_code == requests.codes.ok:
-                        logger.info(f"digital instantiation {identifier} successfully updated")
-                    elif grist_out.ok:
-                        logger.warning("digital instantiation update returned a status > 200 but < 400")
-                    else:
-                        logger.error(f"digital instantiation {identifier} could not be updated")
-
-            if not new_fields and not differences:
-                print("the metadata in the BWF file match those in Grist")
+        put_to_grist(identifier, metadata, yes)
 
 
 @app.command
