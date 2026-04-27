@@ -86,7 +86,7 @@ def get_from_grist(table: Literal['di', 'columns'], identifier):
     return None
 
 
-def put_to_grist(identifier, metadata, yes):
+def put_to_grist(identifier, metadata, yes=False):
     records = get_from_grist('di', identifier)
     if records is None:
         exit(1)
@@ -108,13 +108,13 @@ def put_to_grist(identifier, metadata, yes):
         logger.trace(f"updating digital instantiation {identifier}, record id {row_id}")
 
         differences = {k: metadata[k] for k in metadata.keys()
-                       if metadata[k] != "" and grist_data[k] and metadata[k] != grist_data[k]}
+                       if metadata[k] != "" and grist_data[k] != "" and metadata[k] != grist_data[k]}
 
         new_fields = {k: metadata[k] for k in metadata.keys()
                       if metadata[k] != "" and (grist_data[k] == "" or grist_data[k] is None)}
 
         if new_fields:
-            print("the BWF file has the following fields that are not in Grist:")
+            print("The following metadata fields are currently not in Grist:")
             pretty_print(new_fields)
             if yes or Confirm.ask('Do you want to update the metadata in Grist?', default=True):
                 grist_out = requests.patch(f"{grist_tables_url}/Digital_instantiations/records",
@@ -166,11 +166,11 @@ def di(*files: str, file_digest = False, yes = False):
         exit(1)
 
     full_field_mapping = {"OriginalFilename": "Digital_instantiation_identifier", "FileUse": "FileUse",
-                     "Duration": "Duration",
-                     "ICMT": "Digitization_comment", "MD5Stored": "MD5Stored", "OriginationDate": "OriginationDate",
-                     "OriginationTime": "OriginationTime", "CodingHistory": "CodingHistory", "ITCH": "Technician",
-                     "ISFT": "Creating_software", "Channels": "Channels", "SampleRate": "SampleRate",
-                     "BitPerSample": "BitPerSample", "FileSize": "File_Size", "Description": "Description"}
+                          "Duration": "Duration", "ICMT": "Digitization_comment", "MD5Stored": "MD5Stored",
+                          "OriginationDate": "OriginationDate", "OriginationTime": "OriginationTime",
+                          "CodingHistory": "CodingHistory", "ITCH": "Technician", "ISFT": "Creating_software",
+                          "Channels": "Channels", "SampleRate": "SampleRate", "BitPerSample": "BitPerSample",
+                          "FileSize": "File_Size", "Description": "Description"}
 
     grist_out = get_from_grist('columns', None)
     if grist_out is None:
@@ -235,7 +235,7 @@ def di(*files: str, file_digest = False, yes = False):
 
 @app.command
 def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, verify_sha: bool = False,
-             threshold_mb: int = 64, chunk_mb: int = 64, concurrency: int = 8,  # threshold should be 100 mb, chunk 8-10 mb
+             threshold_mb: int = 100, chunk_mb: int = 10, concurrency: int = 8,
              storage_class: Literal["STANDARD", "INTELLIGENT_TIERING", "STANDARD_IA", "ONEZONE_IA",
                                     "GLACIER_IR", "GLACIER", "DEEP_ARCHIVE"] = "DEEP_ARCHIVE"):
     """Upload file(s) to an S3 bucket. Bucket information must be in the bwftool config file, and AWS credentials
@@ -287,7 +287,7 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
                 expected_sha = sha256(file)
                 sha_just_calculated = True
                 if store_sha:
-                    pass  # TODO save to grist
+                    put_to_grist(identifier, {"SHA256": expected_sha}, yes=True)
 
             if verify_sha:
                 if not sha_just_calculated:
@@ -302,8 +302,10 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
                                        expected_checksum_hex=expected_sha, storage_class=storage_class,
                                        threshold=threshold, part_size=chunk, concurrency=concurrency)
         if status is None:
-            logger.error(f"File {file} had checksum mismatch on S3 after upload.")
+            logger.error(f"File {file} had checksum mismatch on S3 after upload. File was deleted on S3.")
             continue
+        else:
+            put_to_grist(identifier, {"uploaded_to_S3": True}, yes=True)
 
         # TODO clean up
 
