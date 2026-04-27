@@ -12,16 +12,6 @@ from typing_extensions import Literal
 s3_client = boto3.client("s3", region_name=None)  # TODO region is None by default in the original AI slop
 
 
-def to_key(path: str, root: str | None, prefix: str) -> str:
-    p = Path(path)
-    if root:
-        rel = p.relative_to(Path(root))
-        key = rel.as_posix()
-    else:
-        key = p.name
-    return f"{prefix}{key}" if prefix else key
-
-
 def upload_singlepart(bucket, key, path, checksum_b64, storage_class):
     if checksum_b64:
         return s3_client.put_object(
