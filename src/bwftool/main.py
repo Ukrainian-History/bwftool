@@ -222,7 +222,7 @@ def di(*files: str, file_digest = False, yes = False):
 
 @app.command
 def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, verify_sha: bool = False,
-             threshold_mb: int = 64, chunk_mb: int = 64, concurrency: int = 8,
+             threshold_mb: int = 64, chunk_mb: int = 64, concurrency: int = 8,  # threshold should be 100 mb, chunk 8-10 mb
              storage_class: Literal["STANDARD", "INTELLIGENT_TIERING", "STANDARD_IA", "ONEZONE_IA",
                                     "GLACIER_IR", "GLACIER", "DEEP_ARCHIVE"] = "DEEP_ARCHIVE"):
     """Upload file(s) to an S3 bucket. Bucket information must be in the bwftool config file, and AWS credentials
@@ -245,7 +245,7 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
         chunk_mb:
             Size of multipart chunks.
         concurrency:
-            Number of simultaneous uploads.
+            Number of simultaneous uploads. This is currently ignored.
         storage_class:
             AWS S3 storage class to which the uploaded file(s) should be assigned.
     """
@@ -287,7 +287,7 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
 
         resp, head, status = upload_s3(bucket=s3_bucket, path=str(file.resolve()), key=identifier,
                                        expected_checksum_hex=expected_sha, storage_class=storage_class,
-                                       threshold=threshold, chunk=chunk, concurrency=concurrency)
+                                       threshold=threshold, part_size=chunk, concurrency=concurrency)
         if status is None:
             logger.error(f"File {file} had checksum mismatch on S3 after upload.")
             continue
