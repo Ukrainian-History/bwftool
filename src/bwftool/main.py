@@ -10,12 +10,11 @@ from loguru import logger
 import requests
 from glom import glom
 import yaml
-from requests import Response
 from rich.prompt import Confirm
 
-from bwfIO import get_bwf_tech
-from bwfIO import get_bwf_core
-from aws_s3 import upload_s3
+from bwftool.bwfIO import get_bwf_tech
+from bwftool.bwfIO import get_bwf_core
+from bwftool.aws_s3 import upload_s3
 
 app = App(help="CLI tool for working with Broadcast Wav files.")
 
