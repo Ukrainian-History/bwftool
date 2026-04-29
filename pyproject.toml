@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-bwftool = "bwftool:main"
+bwftool = "bwftool.main:main"
 
 [build-system]
 requires = ["hatchling"]
