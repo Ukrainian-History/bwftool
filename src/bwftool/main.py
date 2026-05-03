@@ -257,7 +257,7 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
         chunk_mb:
             Size of multipart chunks.
         concurrency:
-            Number of simultaneous uploads. This is currently ignored.
+            Maximum number of simultaneous uploads.
         storage_class:
             AWS S3 storage class to which the uploaded file(s) should be assigned.
     """
