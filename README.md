@@ -1,9 +1,9 @@
 # bwftool
 ## A CLI tool for working with Broadcast Wave files
 
-This is meant to be a partial replacement and extension of [the CLI tools in `autoBWF`](https://autobwf.readthedocs.io/en/release/splicelame.html).
+This tool is meant to be a partial replacement and extension of [the CLI tools in `autoBWF`](https://autobwf.readthedocs.io/en/release/splicelame.html).
 
-It is being tested in a production situation, but is not really ready for general use.
+It is being tested in a production situation, but is not completely ready for general use.
 
 Not all tools are implemented yet.
 
@@ -63,7 +63,7 @@ Upload file(s) to an S3 bucket. Bucket information must be in the bwftool config
 * `--verify-sha, --no-verify-sha`: Retrieve SHA256 checksum from Grist and verify local file before attempting to upload.  *[default: False]*
 * `--threshold-mb`: File size above which multipart upload will be used.  *[default: 100]*
 * `--chunk-mb`: Size of multipart chunks.  *[default: 10]*
-* `--concurrency`: Number of simultaneous uploads. This is currently ignored.  *[default: 8]*
+* `--concurrency`: Maximum number of simultaneous uploads.  *[default: 8]*
 * `--storage-class`: AWS S3 storage class to which the uploaded file(s) should be assigned.  *[choices: STANDARD, INTELLIGENT_TIERING, STANDARD_IA, ONEZONE_IA, GLACIER_IR, GLACIER, DEEP_ARCHIVE]*  *[default: DEEP_ARCHIVE]*
 
 ## bwftool mp3

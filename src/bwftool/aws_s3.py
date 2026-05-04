@@ -47,7 +47,7 @@ def upload_multipart(bucket, key, path, storage_class, part_size, concurrency):
     upload_id = out["UploadId"]
 
     def upload_part(part_number):
-        logger.trace(f"start upload of part {part_number}")
+        logger.info(f"start upload of part {part_number}")
         offset = (part_number - 1) * part_size
         with open(path, "rb") as f:
             f.seek(offset)
@@ -102,8 +102,8 @@ def upload_multipart(bucket, key, path, storage_class, part_size, concurrency):
             "head": head_resp,
         }
 
-    except Exception:  # TODO need to make this less generic, or at least log the error
-        logger.warning(f"failed to upload {path}")
+    except Exception:  # TODO need to make this less generic
+        logger.exception(f"failed to upload {path}")
         s3_client.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=upload_id)
         return None
 
