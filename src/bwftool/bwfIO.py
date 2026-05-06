@@ -15,6 +15,8 @@ import subprocess
 import io
 import csv
 import re
+import os
+import xml.etree.ElementTree as ET
 
 bwfmetaedit = ["bwfmetaedit", "--specialchars"]
 
@@ -113,6 +115,71 @@ def get_bwf_core(file):
 
     core.update(parse_bwf_description(core["Description"]))
     return core
+
+
+def get_xmp(filename):
+    """Runs bwfmetaedit to extract XMP metadata from a BWF file. This is to support files created using the legacy
+    UHEC workflow that embedded descriptive metadata in the BWF file itself.
+
+    Args:
+        filename (str): The name of the target BWF file.
+
+    Returns:
+        dict:  Dict of metadata values indexed by the field name. If field is empty, the value is an empty string.
+    """
+
+    command = bwfmetaedit.copy()
+    command.extend(["--out-XMP-xml", filename])
+    subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    outfile = filename + ".XMP.xml"
+    try:
+        tree = ET.parse(outfile)
+    except FileNotFoundError:
+        md = {"interviewer": "", "interviewee": "", "owner": "",
+              "metadataDate": "", "language": "", "xmp_description": "",
+              "form": "", "host": "", "speaker": "", "performer": "",
+              "topics": "", "names": "", "events": "", "places": "", "creator": ""
+              }
+        return md
+    root = tree.getroot()
+
+    def check_li_child(element, xpath):
+        """Provides backwards compatibility for XMP saved using exempi and python-metadata-toolkit"""
+        node = element.find(xpath + "//rdf:li", namespaces)
+        if node is not None:
+            return node
+        else:
+            return element.find(xpath, namespaces)
+
+    md = {
+        "owner": check_li_child(root, './/xmpRights:Owner'),
+        "metadataDate": root.find('.//xmp:MetadataDate', namespaces),
+        "language": root.findall('.//dc:language//rdf:li', namespaces),
+        "xmp_description": check_li_child(root, './/dc:description'),
+        "interviewer": check_li_child(root, './/autoBWF:Interviewer'),
+        "interviewee": check_li_child(root, './/autoBWF:Interviewee'),
+        "form": check_li_child(root, './/autoBWF:Form'),
+        "host": check_li_child(root, './/autoBWF:Host'),
+        "speaker": check_li_child(root, './/autoBWF:Speaker'),
+        "performer": check_li_child(root, './/autoBWF:Performer'),
+        "topics": check_li_child(root, './/autoBWF:Topics'),
+        "names": check_li_child(root, './/autoBWF:Names'),
+        "events": check_li_child(root, './/autoBWF:Events'),
+        "places": check_li_child(root, './/autoBWF:Places'),
+        "creator": check_li_child(root, './/dc:creator'),
+    }
+
+    for field in md:
+        if md[field] is not None:
+            if field == "language":
+                md[field] = ";".join([node.text for node in md[field]])
+            else:
+                md[field] = md[field].text
+        else:
+            md[field] = ""
+
+    os.remove(outfile)
+    return md
 
 
 if __name__ == "__main__":
