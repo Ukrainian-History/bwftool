@@ -131,7 +131,7 @@ def get_xmp(filename):
     command = bwfmetaedit.copy()
     command.extend(["--out-XMP-xml", filename])
     subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    outfile = filename + ".XMP.xml"
+    outfile = str(filename) + ".XMP.xml"
     try:
         tree = ET.parse(outfile)
     except FileNotFoundError:

@@ -319,13 +319,64 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
 
 
 @app.command
-def mp3():
+def mp3(*infile: Annotated[str, Parameter(required=True)], outfile: str | None = None,
+        vbr_level: Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] | None = 7,
+        cbr: Literal[32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320] | None = None):
     """Generate MP3 access file and (optionally) upload metadata as a new Digital Instantiation in Grist.
 
-       Parameters
-       ----------
+        Parameters
+        ----------
+        infile:
+            Input WAV file(s) to be converted to MP3
+        outfile:
+            Output filename to save the MP3 to. Can only be used if there is only one input file. By default, the
+            output filename will be the original file name with '.wav' changed to '.mp3'
+        vbr_level:
+            The MP3 VBR encoding level. 'vbr_level' and 'cbr' cannot both be specified.
+        cbr:
+            The MP3 bitrate for Constant Bit Rate encoding. 'vbr_level' and 'cbr' cannot both be specified.
+
     """
-    logger.warning("Not yet implemented")
+
+    if outfile is not None and len(infile) > 1:
+        logger.error("Can only have one input file if output file is specified.")
+        exit(1)
+    if vbr_level and cbr:
+        logger.error("vbr-level and cbr cannot both be specified.")
+        exit(1)
+    if vbr_level is None and cbr is None:
+        logger.error("Either vbr_level or cbr must be specified.")
+
+    for input_file in infile:
+        input_file = Path(input_file)
+
+        if outfile is None:
+            outfile = input_file.stem + '.mp3'
+
+        metadata = get_bwf_core(input_file)
+        metadata.update(get_xmp(input_file))
+
+        ffmpeg_command = ["ffmpeg", "-y",
+                          "-i", str(input_file.resolve()),
+                          "-c:a", "libmp3lame",
+                          ]
+        if cbr:
+            ffmpeg_command.extend(["-b:a", f"{cbr}k"])
+        else:
+            ffmpeg_command.extend(["-q:a", str(vbr_level)])
+
+        # TODO add ID3v2 metadata
+
+        ffmpeg_command.extend(["-id3v2_version", "3"])
+        ffmpeg_command.append(str(input_file.parent / outfile))
+
+        subprocess.run(ffmpeg_command, check=True)
+
+    # for ID3 tags:
+
+    # ffmpeg -i input.wav -c:a libmp3lame -q:a 2 \
+    #   -metadata TIT1="My Grouping" \
+    #   output.mp3
 
 
 @app.command
