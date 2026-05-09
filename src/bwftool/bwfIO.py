@@ -34,7 +34,7 @@ def get_bwf_tech(file, verify_digest=False):
     """Runs bwfmetaedit to extract BWF technical metadata from a BWF file.
 
     Args:
-        file (str): The name of the target BWF file.
+        file (str | Path): The name of the target BWF file.
         verify_digest (bool): If True, add "--MD5-verify" to the bwfmetaedit call.
 
     Returns:
@@ -96,7 +96,7 @@ def get_bwf_core(file):
     """Runs bwfmetaedit to extract BWF core metadata from a BWF file.
 
     Args:
-        file (str): The name of the target BWF file.
+        file (str | Path): The name of the target BWF file.
 
     Returns:
         dict: Metadata values indexed by the field name. If field is empty, the value is an empty string.
@@ -122,7 +122,7 @@ def get_xmp(filename):
     UHEC workflow that embedded descriptive metadata in the BWF file itself.
 
     Args:
-        filename (str): The name of the target BWF file.
+        filename (str | Path): The name of the target BWF file.
 
     Returns:
         dict:  Dict of metadata values indexed by the field name. If field is empty, the value is an empty string.

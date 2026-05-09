@@ -56,11 +56,14 @@ def pretty_print(thing):
         print(f'{name:20} => {val}')
 
 
-def get_from_grist(table: Literal['di', 'columns'], identifier):
+def get_from_grist(table: Literal['di', 'di_columns', 'ma'], identifier):
     if table == 'di':
         grist_out = requests.get(f"{grist_tables_url}/Digital_instantiations/records", headers=grist_api_headers,
-                                     params={"filter": f'{{"Digital_instantiation_identifier": ["{identifier}"]}}'})
-    elif table == 'columns':
+                                 params={"filter": f'{{"Digital_instantiation_identifier": ["{identifier}"]}}'})
+    if table == 'ma':
+        grist_out = requests.get(f"{grist_tables_url}/assets/records", headers=grist_api_headers,
+                                 params={"filter": f'{{"Asset_identifier": ["{identifier}"]}}'})
+    elif table == 'di_columns':
         grist_out = requests.get(f"{grist_tables_url}/Digital_instantiations/columns", headers=grist_api_headers)
     else:
         logger.error(f"table {table} not supported.")
@@ -73,10 +76,10 @@ def get_from_grist(table: Literal['di', 'columns'], identifier):
         logger.error(f'Grist API problem. {grist_out.text}')
         return None
 
-    if table == 'di':
-        records = grist_out.json()["records"]
+    if table == 'di' or table == 'ma':
+        records = list(grist_out.json()["records"])
         if len(records) > 1:
-            message = (f"the identifier {identifier} has more than one digital instantiation record in Grist"
+            message = (f"the identifier {identifier} has more than one instantiation record in Grist"
                        " -- this isn't supposed to happen!")
             logger.error(message)
             return None
@@ -92,6 +95,7 @@ def get_from_grist(table: Literal['di', 'columns'], identifier):
 def put_to_grist(identifier, metadata, yes=False):
     records = get_from_grist('di', identifier)
     if records is None:
+        logger.error(f"Failed to get Grist records for {identifier}")
         exit(1)
 
     if len(records) == 0:
@@ -175,7 +179,7 @@ def di(*files: str, file_digest = False, yes = False):
                           "Channels": "Channels", "SampleRate": "SampleRate", "BitPerSample": "BitPerSample",
                           "FileSize": "File_Size", "Description": "Description"}
 
-    grist_out = get_from_grist('columns', None)
+    grist_out = get_from_grist('di_columns', None)
     if grist_out is None:
         exit(1)
 
@@ -321,7 +325,8 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
 @app.command
 def mp3(*infile: Annotated[str, Parameter(required=True)], outfile: str | None = None,
         vbr_level: Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] | None = 7,
-        cbr: Literal[32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320] | None = None):
+        cbr: Literal[32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320] | None = None,
+        create_di: bool = True, set_default_access_file = False):
     """Generate MP3 access file and (optionally) upload metadata as a new Digital Instantiation in Grist.
 
         Parameters
@@ -335,7 +340,12 @@ def mp3(*infile: Annotated[str, Parameter(required=True)], outfile: str | None =
             The MP3 VBR encoding level. 'vbr_level' and 'cbr' cannot both be specified.
         cbr:
             The MP3 bitrate for Constant Bit Rate encoding. 'vbr_level' and 'cbr' cannot both be specified.
-
+        create_di:
+            Create a new Digital Instantiation in Grist for the newly-generated MP3 file. Use '--no-create-di'
+            to prevent the creation of a new DI.
+        set_default_access_file:
+            Make the newly-generated MP3 file the default access file for the Media Asset, provided that
+            the appropriate MA can be determined (bwftool will issue a warning if it cannot).
     """
 
     if outfile is not None and len(infile) > 1:
@@ -367,16 +377,29 @@ def mp3(*infile: Annotated[str, Parameter(required=True)], outfile: str | None =
 
         # TODO add ID3v2 metadata
 
+        ffmpeg_command.extend(['-metadata', 'TOWN="Ukrainian History and Education Center Archives"'])
+        ffmpeg_command.extend(['-metadata', 'WOAS="https://UkrHEC.org/audio-collections"'])
+
+        # ffmpeg_command.extend(['-metadata', 'USER="https://UkrHEC.org/audio-collections"'])  assets.rights or ICOP
+        # ffmpeg_command.extend(['-metadata', 'TIT1="https://UkrHEC.org/audio-collections"'])  assets.Source_collection or ISRC
+        # ffmpeg_command.extend(['-metadata', 'TIT2="https://UkrHEC.org/audio-collections"'])  assets.Title or INAM
+        # ffmpeg_command.extend(['-metadata', 'TIT3="https://UkrHEC.org/audio-collections"'])  assets.Asset_identifer or from BWF Description
+        # ffmpeg_command.extend(['-metadata', 'OWNE="https://UkrHEC.org/audio-collections"'])  assets.Rights_owner or from XMP
+        # ffmpeg_command.extend(['-metadata', 'TSSE="https://UkrHEC.org/audio-collections"'])
+
         ffmpeg_command.extend(["-id3v2_version", "3"])
         ffmpeg_command.append(str(input_file.parent / outfile))
 
         subprocess.run(ffmpeg_command, check=True)
 
-    # for ID3 tags:
+        if create_di:
+            # TODO upload DI to Grist
+            pass
 
-    # ffmpeg -i input.wav -c:a libmp3lame -q:a 2 \
-    #   -metadata TIT1="My Grouping" \
-    #   output.mp3
+        if set_default_access_file:
+            # TODO determine media asset
+            # TODO set default access file for the media asset
+            pass
 
 
 @app.command
