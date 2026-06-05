@@ -21,6 +21,14 @@ from bwftool.bwfIO import get_xmp
 from bwftool.aws_s3 import upload_s3
 
 app = App(help="CLI tool for working with Broadcast Wav files.")
+app.register_install_completion_command()
+
+
+@app.default
+def main(loglevel: Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"):
+    logger.remove()
+    logger.add(sys.stderr, level=loglevel.upper())
+
 
 yaml_path = Path.home() / ".bwftool"
 
@@ -326,7 +334,7 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
 def mp3(*infile: Annotated[str, Parameter(required=True)], outfile: str | None = None,
         vbr_level: Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] | None = 7,
         cbr: Literal[32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320] | None = None,
-        create_di: bool = True, set_default_access_file = False):
+        create_di: bool = True, make_default = False):
     """Generate MP3 access file and (optionally) upload metadata as a new Digital Instantiation in Grist.
 
         Parameters
@@ -343,7 +351,7 @@ def mp3(*infile: Annotated[str, Parameter(required=True)], outfile: str | None =
         create_di:
             Create a new Digital Instantiation in Grist for the newly-generated MP3 file. Use '--no-create-di'
             to prevent the creation of a new DI.
-        set_default_access_file:
+        make_default:
             Make the newly-generated MP3 file the default access file for the Media Asset, provided that
             the appropriate MA can be determined (bwftool will issue a warning if it cannot).
     """
@@ -396,7 +404,7 @@ def mp3(*infile: Annotated[str, Parameter(required=True)], outfile: str | None =
             # TODO upload DI to Grist
             pass
 
-        if set_default_access_file:
+        if make_default:
             # TODO determine media asset
             # TODO set default access file for the media asset
             pass
