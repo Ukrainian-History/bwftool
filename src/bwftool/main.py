@@ -23,6 +23,12 @@ from bwftool.aws_s3 import upload_s3
 app = App(help="CLI tool for working with Broadcast Wav files.")
 app.register_install_completion_command()
 
+
+def _setup_logging(loglevel: str) -> None:
+    logger.remove()
+    logger.add(sys.stderr, level=loglevel.upper())
+
+
 yaml_path = Path.home() / ".bwftool"
 
 data = {}
@@ -156,7 +162,8 @@ def put_to_grist(identifier, metadata, yes=False):
 
 
 @app.command
-def di(*files: str, file_digest = False, yes = False):
+def di(*files: str, file_digest = False, yes = False,
+       loglevel: Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"):
     """Extract BWF metadata and create/update a Digital Instantiation in Grist.
 
         Parameters
@@ -167,7 +174,11 @@ def di(*files: str, file_digest = False, yes = False):
             Answer 'yes' to all questions. May cause unintended overwriting of DI metadata in Grist.
         files: str
             Path(s) to BWF file(s).
+        loglevel:
+            Set the desired level of logging output.
     """
+
+    _setup_logging(loglevel)
 
     if grist_base_url is None:
         logger.error("Grist table ID and/or key has not been provided")
@@ -245,7 +256,8 @@ def di(*files: str, file_digest = False, yes = False):
 def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, verify_sha: bool = False,
              threshold_mb: int = 100, chunk_mb: int = 10, concurrency: int = 8,
              storage_class: Literal["STANDARD", "INTELLIGENT_TIERING", "STANDARD_IA", "ONEZONE_IA",
-                                    "GLACIER_IR", "GLACIER", "DEEP_ARCHIVE"] = "DEEP_ARCHIVE"):
+                                    "GLACIER_IR", "GLACIER", "DEEP_ARCHIVE"] = "DEEP_ARCHIVE",
+             loglevel: Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"):
     """Upload file(s) to an S3 bucket. Bucket information must be in the bwftool config file, and AWS credentials
         for boto3 must be in the '~/.aws' directory.
 
@@ -269,7 +281,11 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
             Maximum number of simultaneous uploads.
         storage_class:
             AWS S3 storage class to which the uploaded file(s) should be assigned.
+        loglevel:
+            Set the desired level of logging output.
     """
+
+    _setup_logging(loglevel)
 
     threshold = threshold_mb * 1024 * 1024
     chunk = chunk_mb * 1024 * 1024
@@ -327,7 +343,8 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
 def mp3(*infile: Annotated[str, Parameter(required=True)], outfile: str | None = None,
         vbr_level: Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] | None = 7,
         cbr: Literal[32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320] | None = None,
-        create_di: bool = True, make_default = False):
+        create_di: bool = True, make_default = False,
+        loglevel: Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"):
     """Generate MP3 access file and (optionally) upload metadata as a new Digital Instantiation in Grist.
 
         Parameters
@@ -347,7 +364,11 @@ def mp3(*infile: Annotated[str, Parameter(required=True)], outfile: str | None =
         make_default:
             Make the newly-generated MP3 file the default access file for the Media Asset, provided that
             the appropriate MA can be determined (bwftool will issue a warning if it cannot).
+        loglevel:
+            Set the desired level of logging output.
     """
+
+    _setup_logging(loglevel)
 
     if outfile is not None and len(infile) > 1:
         logger.error("Can only have one input file if output file is specified.")
@@ -404,7 +425,8 @@ def mp3(*infile: Annotated[str, Parameter(required=True)], outfile: str | None =
 
 
 @app.command
-def csv(*files: Annotated[str, Parameter(required=True)], verify_digest=False, outfile=""):
+def csv(*files: Annotated[str, Parameter(required=True)], verify_digest=False, outfile="",
+        loglevel: Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"):
     """Extract BWF metadata to a CSV file.
 
         Parameters
@@ -415,7 +437,11 @@ def csv(*files: Annotated[str, Parameter(required=True)], verify_digest=False, o
             Verify the MD5 digest of the audio data chunk.
         outfile:
             Name of the CSV output file. Use "" to output to STDOUT.
+        loglevel:
+            Set the desired level of logging output.
     """
+
+    _setup_logging(loglevel)
 
     output_fields = ["filename", "OriginalFilename", "FileContent", "FileUse", "INAM", "ICRD", "form", "Duration",
                      "language", "ISRC", "creator", "xmp_description", "interviewer", "interviewee", "host", "speaker",
@@ -426,6 +452,7 @@ def csv(*files: Annotated[str, Parameter(required=True)], verify_digest=False, o
         output_fields.extend(["MD5Generated", "Errors"])
 
     if outfile:
+        logger.trace("We have an 'outfile'.")
         if path.isfile(outfile):
             # if file exists, assume that it is a pre-existing CSV output file generated by 'bwftool csv' and append
             # rows without generating a header
@@ -435,6 +462,7 @@ def csv(*files: Annotated[str, Parameter(required=True)], verify_digest=False, o
             output = csvmod.DictWriter(open(outfile, 'w'), output_fields)
             output.writeheader()
     else:
+        logger.trace("No 'outfile' specified")
         output = csvmod.DictWriter(sys.stdout, output_fields)
         output.writeheader()
 
@@ -454,17 +482,21 @@ def csv(*files: Annotated[str, Parameter(required=True)], verify_digest=False, o
 
 
 @app.command
-def splice():
+def splice(loglevel: Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"):
     """Generate a derivative WAV file from an EDL and (optionally) upload metadata as a Digital Instantiation in Grist.
 
-       Parameters
-       ----------
+        Parameters
+        ----------
+        loglevel:
+            Set the desired level of logging output.
     """
+    _setup_logging(loglevel)
     logger.warning("Not yet implemented")
 
 
 @app.command
-def validate(*files: str, quiet=False):
+def validate(*files: str, quiet=False,
+             loglevel: Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"):
     """Verify that the audio chunk MD5 digest for fixity.
 
         Parameters
@@ -473,7 +505,11 @@ def validate(*files: str, quiet=False):
             Audio files to verify MD5 digest for fixity.
         quiet: bool
             Suppress messages about successful validation.
+        loglevel:
+            Set the desired level of logging output.
     """
+
+    _setup_logging(loglevel)
 
     for infile in files:
         infile = Path(infile)
