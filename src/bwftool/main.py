@@ -23,13 +23,6 @@ from bwftool.aws_s3 import upload_s3
 app = App(help="CLI tool for working with Broadcast Wav files.")
 app.register_install_completion_command()
 
-
-@app.default
-def main(loglevel: Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"):
-    logger.remove()
-    logger.add(sys.stderr, level=loglevel.upper())
-
-
 yaml_path = Path.home() / ".bwftool"
 
 data = {}
