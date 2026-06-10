@@ -191,8 +191,10 @@ def di(*files: str, file_digest = False, yes = False,
                           "Channels": "Channels", "SampleRate": "SampleRate", "BitPerSample": "BitPerSample",
                           "FileSize": "File_Size", "Description": "Description"}
 
+    logger.trace("Getting di columns from grist.")
     grist_out = get_from_grist('di_columns', None)
     if grist_out is None:
+        logger.error("Could not get di columns from grist")
         exit(1)
 
     grist_columns = glom(grist_out.json(), ('columns', ['id']))
