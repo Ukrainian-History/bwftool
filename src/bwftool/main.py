@@ -64,10 +64,11 @@ def pretty_print(thing):
 
 
 def get_from_grist(table: Literal['di', 'di_columns', 'ma'], identifier):
+    global grist_tables_url, grist_api_headers
     if table == 'di':
         grist_out = requests.get(f"{grist_tables_url}/Digital_instantiations/records", headers=grist_api_headers,
                                  params={"filter": f'{{"Digital_instantiation_identifier": ["{identifier}"]}}'})
-    if table == 'ma':
+    elif table == 'ma':
         grist_out = requests.get(f"{grist_tables_url}/assets/records", headers=grist_api_headers,
                                  params={"filter": f'{{"Asset_identifier": ["{identifier}"]}}'})
     elif table == 'di_columns':
@@ -93,7 +94,7 @@ def get_from_grist(table: Literal['di', 'di_columns', 'ma'], identifier):
 
         return records
 
-    if table == 'columns':
+    if table == 'di_columns':
         return grist_out
 
     return None
