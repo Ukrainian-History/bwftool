@@ -163,7 +163,7 @@ def put_to_grist(identifier, metadata, yes=False):
 
 
 @app.command
-def di(*files: str, file_digest = False, yes = False,
+def di(*files: Path, file_digest = False, yes = False,
        loglevel: Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"):
     """Extract BWF metadata and create/update a Digital Instantiation in Grist.
 
@@ -204,7 +204,6 @@ def di(*files: str, file_digest = False, yes = False,
         logger.info(f'Some columns for valid BWF data are missing in the Grist DI table')
 
     for infile in files:
-        infile = Path(infile)
         try:
             metadata = get_bwf_core(infile)
         except subprocess.CalledProcessError:
