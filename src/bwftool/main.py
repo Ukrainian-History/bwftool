@@ -213,18 +213,16 @@ def di(*files: str, file_digest = False, yes = False,
 
         # TODO allow for MP3 DI creation
 
-        metadata["filename"] = infile  # TODO Why is this necessary????
         metadata.update(get_bwf_tech(infile))
 
         if metadata["OriginalFilename"] != "":
-            if metadata["filename"] != metadata["OriginalFilename"]:
+            if infile.name != metadata["OriginalFilename"]:
                 logger.warning(
                     f'Mismatch in current ({infile}) and original ({metadata["OriginalFilename"]}) filenames')
 
             identifier = metadata["OriginalFilename"]
         else:
-            identifier = Path(metadata["filename"]).name
-            metadata["OriginalFilename"] = identifier
+            metadata["OriginalFilename"] = infile.name
 
         metadata["FileSize"] = path.getsize(infile)
 
