@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 import hashlib
 import sys
@@ -47,8 +48,15 @@ class BwftoolConfig(object):
         self.pi_table = data.get("pi_table", "Physical_instantiations")
 
         self.ma_regex = data.get("ma_regex")
-        self.di_regex = data.get("di_regex")
+        # should have one capture group for the variable part of the identifier
         self.pi_regex = data.get("pi_regex")
+        # should have one capture group for the variable part of the identifier
+        self.di_regex = data.get("di_regex")
+        # should have four capture groups:
+        #   1. the MA or PI identifier element
+        #   3. the file use indicator (e.g. 'pres', 'prod')
+        #   4. the instantiation date
+        #   5. the date disambiguator (may be empty)
 
         if grist_doc_id and grist_key:
             grist_base_url = "https://docs.getgrist.com/api"
@@ -191,7 +199,7 @@ def di(*files: Path, file_digest = False, yes = False,
             Calculate the SHA256 digest of the entire WAV file and store result in the DI. Slow for large files!
         yes: bool, optional
             Answer 'yes' to all questions. May cause unintended overwriting of DI metadata in Grist.
-        files: str
+        files: Path
             Path(s) to BWF file(s).
         loglevel:
             Set the desired level of logging output.
@@ -268,6 +276,15 @@ def di(*files: Path, file_digest = False, yes = False,
                 metadata["SHA256"] = sha256(infile)
 
         put_to_grist(identifier, metadata, yes)
+
+        if config_vars.id_automatch:
+            di_info = re.compile(config_vars.di_regex).match(infile.name)
+            if di_info:
+                pass
+                # TODO if it's a preservation master, pull PI identifiers and see if there's a match, otherwise create
+                # TODO pull MA identifiers and see if MA exists, if not, create
+            else:
+                logger.warning(f'file name {infile.name} does not match specified regex')
 
 
 @app.command
