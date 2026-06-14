@@ -29,25 +29,41 @@ def _setup_logging(loglevel: str) -> None:
     logger.add(sys.stderr, level=loglevel.upper())
 
 
-yaml_path = Path.home() / ".bwftool"
+class BwftoolConfig(object):
+    def __init__(self, yaml_path = Path.home() / ".bwftool"):
+        self.data = {}
+        if yaml_path.exists():
+            with open(yaml_path, "r") as file:
+                data = yaml.safe_load(file)
+        else:
+            logger.warning(f"YAML config file {yaml_path.absolute()} not found. Some functionality may be missing.")
 
-data = {}
-if yaml_path.exists():
-    with open(yaml_path, "r") as file:
-        data = yaml.safe_load(file)
-else:
-    logger.info(f"YAML config file {yaml_path.absolute()} not found. Some functionality may be missing.")
+        grist_doc_id = data.get("grist_doc_id")
+        grist_key = data.get("grist_key")
+        self.s3_bucket = data.get("s3_bucket")
 
-grist_doc_id = data.get("grist_doc_id")
-grist_key = data.get("grist_key")
-s3_bucket = data.get("s3_bucket")
+        self.asset_table = data.get("asset_table", "Assets")
+        self.di_table = data.get("di_table", "Digital_instantiations")
+        self.pi_table = data.get("pi_table", "Physical_instantiations")
 
-if grist_doc_id and grist_key:
-    grist_base_url = "https://docs.getgrist.com/api"
-    grist_tables_url = f"{grist_base_url}/docs/{grist_doc_id}/tables"
-    grist_api_headers = {"Authorization": f"Bearer {grist_key}"}
-else:
-    grist_base_url = None
+        self.ma_regex = data.get("ma_regex")
+        self.di_regex = data.get("di_regex")
+        self.pi_regex = data.get("pi_regex")
+
+        if grist_doc_id and grist_key:
+            grist_base_url = "https://docs.getgrist.com/api"
+            self.grist_tables_url = f"{grist_base_url}/docs/{grist_doc_id}/tables"
+            self.grist_api_headers = {"Authorization": f"Bearer {grist_key}"}
+        else:
+            self.grist_tables_url = None
+
+        if self.di_regex and self.pi_regex and self.ma_regex:
+            self.id_automatch = True
+        else:
+            self.id_automatch = False
+
+
+config_vars = BwftoolConfig()
 
 
 def sha256(file: str) -> str:
@@ -64,17 +80,19 @@ def pretty_print(thing):
 
 
 def get_from_grist(table: Literal['di', 'di_columns', 'ma'], identifier):
-    global grist_tables_url, grist_api_headers
     if table == 'di':
-        grist_out = requests.get(f"{grist_tables_url}/Digital_instantiations/records", headers=grist_api_headers,
+        grist_out = requests.get(f"{config_vars.grist_tables_url}/{config_vars.di_table}/records",
+                                 headers=config_vars.grist_api_headers,
                                  params={"filter": f'{{"Digital_instantiation_identifier": ["{identifier}"]}}'})
     elif table == 'ma':
-        grist_out = requests.get(f"{grist_tables_url}/assets/records", headers=grist_api_headers,
+        grist_out = requests.get(f"{config_vars.grist_tables_url}/{config_vars.asset_table}/records",
+                                 headers=config_vars.grist_api_headers,
                                  params={"filter": f'{{"Asset_identifier": ["{identifier}"]}}'})
     elif table == 'di_columns':
-        grist_out = requests.get(f"{grist_tables_url}/Digital_instantiations/columns", headers=grist_api_headers)
+        grist_out = requests.get(f"{config_vars.grist_tables_url}/{config_vars.di_table}/columns",
+                                 headers=config_vars.grist_api_headers)
     else:
-        logger.error(f"table {table} not supported.")
+        logger.error(f"Table {table} not supported. This is a bug. Please contact the developer.")
         exit(1)
 
     if grist_out.status_code >= 400:
@@ -108,8 +126,8 @@ def put_to_grist(identifier, metadata, yes=False):
 
     if len(records) == 0:
         logger.trace(f"creating new digital instantiation {identifier}")
-        grist_out = requests.post(f"{grist_tables_url}/Digital_instantiations/records",
-                                  headers=grist_api_headers, json={"records": [{"fields": metadata}]})
+        grist_out = requests.post(f"{config_vars.grist_tables_url}/Digital_instantiations/records",
+                                  headers=config_vars.grist_api_headers, json={"records": [{"fields": metadata}]})
 
         if grist_out.status_code == requests.codes.ok:
             logger.info(f"digital instantiation {identifier} successfully created")
@@ -132,8 +150,8 @@ def put_to_grist(identifier, metadata, yes=False):
             print("The following metadata fields are currently not in Grist:")
             pretty_print(new_fields)
             if yes or Confirm.ask('Do you want to update the metadata in Grist?', default=True):
-                grist_out = requests.patch(f"{grist_tables_url}/Digital_instantiations/records",
-                                           headers=grist_api_headers,
+                grist_out = requests.patch(f"{config_vars.grist_tables_url}/Digital_instantiations/records",
+                                           headers=config_vars.grist_api_headers,
                                            json={"records": [{"id": row_id, "fields": new_fields}]})
 
                 if grist_out.status_code == requests.codes.ok:
@@ -147,8 +165,8 @@ def put_to_grist(identifier, metadata, yes=False):
             print("the following fields in the BWF file differ from those in Grist:")
             pretty_print(differences)
             if yes or Confirm.ask('Do you want to update the metadata in Grist?', default=True):
-                grist_out = requests.patch(f"{grist_tables_url}/Digital_instantiations/records",
-                                           headers=grist_api_headers,
+                grist_out = requests.patch(f"{config_vars.grist_tables_url}/Digital_instantiations/records",
+                                           headers=config_vars.grist_api_headers,
                                            json={"records": [{"id": row_id, "fields": differences}]})
 
                 if grist_out.status_code == requests.codes.ok:
@@ -181,7 +199,7 @@ def di(*files: Path, file_digest = False, yes = False,
 
     _setup_logging(loglevel)
 
-    if grist_base_url is None:
+    if config_vars.grist_tables_url is None:
         logger.error("Grist table ID and/or key has not been provided")
         exit(1)
 
@@ -290,7 +308,7 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
     threshold = threshold_mb * 1024 * 1024
     chunk = chunk_mb * 1024 * 1024
 
-    if not s3_bucket:
+    if not config_vars.s3_bucket:
         logger.error("No bucket provided in config file")
         exit(1)
 
@@ -322,7 +340,7 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
         else:
             expected_sha = None
 
-        resp, head, status = upload_s3(bucket=s3_bucket, path=str(file.resolve()), key=identifier,
+        resp, head, status = upload_s3(bucket=config_vars.s3_bucket, path=str(file.resolve()), key=identifier,
                                        expected_checksum_hex=expected_sha, storage_class=storage_class,
                                        threshold=threshold, part_size=chunk, concurrency=concurrency)
         if status is None:
