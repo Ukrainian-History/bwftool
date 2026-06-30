@@ -288,7 +288,7 @@ def di(*files: Path, file_digest = False, yes = False,
 
 
 @app.command
-def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, verify_sha: bool = False,
+def s3upload(*files: Path, skip_checksum: bool = False, store_sha: bool = True, verify_sha: bool = False,
              threshold_mb: int = 100, chunk_mb: int = 10, concurrency: int = 8,
              storage_class: Literal["STANDARD", "INTELLIGENT_TIERING", "STANDARD_IA", "ONEZONE_IA",
                                     "GLACIER_IR", "GLACIER", "DEEP_ARCHIVE"] = "DEEP_ARCHIVE",
@@ -375,7 +375,7 @@ def s3upload(*files: str, skip_checksum: bool = False, store_sha: bool = True, v
 
 
 @app.command
-def mp3(*infile: Annotated[str, Parameter(required=True)], outfile: str | None = None,
+def mp3(*infile: Annotated[Path, Parameter(required=True)], outfile: Path | None = None,
         vbr_level: Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] | None = 7,
         cbr: Literal[32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320] | None = None,
         create_di: bool = True, make_default = False,
@@ -460,7 +460,7 @@ def mp3(*infile: Annotated[str, Parameter(required=True)], outfile: str | None =
 
 
 @app.command
-def csv(*files: Annotated[str, Parameter(required=True)], verify_digest=False, outfile="",
+def csv(*files: Annotated[Path, Parameter(required=True)], verify_digest=False, outfile="",
         loglevel: Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"):
     """Extract BWF metadata to a CSV file.
 
@@ -530,7 +530,7 @@ def splice(loglevel: Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"] = "WA
 
 
 @app.command
-def validate(*files: str, quiet=False,
+def validate(*files: Path, quiet=False,
              loglevel: Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"] = "WARNING"):
     """Verify that the audio chunk MD5 digest for fixity.
 
