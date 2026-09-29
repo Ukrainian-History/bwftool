@@ -563,6 +563,9 @@ def validate(*files: Path, quiet=False,
             logger.warning(f'{infile} does not have a MD5 stored value')
             continue
 
+        out = {k: metadata[k] for k in ["MD5Stored", "MD5Generated", "Information"] if k in metadata}
+        print(out)
+
 
 def main():
     app()
